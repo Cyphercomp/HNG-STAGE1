@@ -23,16 +23,8 @@ def get_data(name):
             raise ExternalAPIError(detail=f"External API error: {str(e)}")
            
         gen_data = gen_res.json()
-        print(f"DEBUG GENDERIZE: {gen_data}")
         age_data = age_res.json()
-        print(f"DEBUG GENDERIZE: {age_data}")
         nat_data = nat_res.json()
-        print(f"DEBUG GENDERIZE: {nat_data}")
-
-        print(gen_data)
-        print(age_data)
-        print(nat_data)
-
      
 
         if (gen_data['gender'] is None or gen_data['count'] == 0) or age_data['age'] == None or nat_data['country'] == []:
@@ -44,14 +36,12 @@ def get_data(name):
         elif age <= 59: age_group = 'Adult'
         else: age_group = 'Senior'
 
-        print(nat_data['country'])
         countries = nat_data.get('country', [])
         if not countries:
             raise ValidationError(detail="No country data found for this name.")
 
         probable_country = max(countries, key=lambda x: x['probability'])
         
-        #probable_country = max(nat_data['country'], key = lambda x:x['probability'])# or use itemgetter('probability')
         print(probable_country)
         return {
                 'name': name,
@@ -71,18 +61,8 @@ def get_data(name):
 class GenderizeViewSet(viewsets.ModelViewSet):
     http_method_names = ['get','post','delete']
     queryset = Profile.objects.all()
-    #serializer_class = ProfileSerializer
     lookup_field = 'pk'
 
-    # def get_serializer_context(self):
-    #     if self.request.method == "POST":
-    #         name = self.request.data.get('name')
-    #     else:
-    #         name = self.request.query_params.get('name')
-
-    #     print(name)
-    #     payload = get_data(name)
-    #     return {'payload': payload}
     
     def get_serializer_class(self):
         if self.action == 'create' or (self.action == 'list' and 'name' in self.request.query_params):
@@ -94,7 +74,7 @@ class GenderizeViewSet(viewsets.ModelViewSet):
         name = self.request.query_params.get('name')
         
         if name:
-            # Filter the database results by name
+            
             queryset = queryset.filter(name__iexact=name)
             
         return queryset
@@ -103,8 +83,6 @@ class GenderizeViewSet(viewsets.ModelViewSet):
         if request.method == 'GET':
             name = request.query_params.get('name')
         name = request.data.get('name') 
-
-        print(name)
 
         if not name:
             return Response(status=status.HTTP_400_BAD_REQUEST)
@@ -138,12 +116,9 @@ class GenderizeViewSet(viewsets.ModelViewSet):
     def list(self, request, *args, **kwargs):
         name = request.query_params.get('name')
 
-        # If no name is provided, perform the standard "list all" behavior
         if not name:
             return super().list(request, *args, **kwargs)
 
-        # 1. Try to find the profile in the database
-        # We use .filter().first() to handle cases where names might repeat
         instance = Profile.objects.filter(name__iexact=name).first()
 
         if instance:
@@ -154,8 +129,7 @@ class GenderizeViewSet(viewsets.ModelViewSet):
                 'data': serializer.data
             }, status=status.HTTP_200_OK)
 
-        # 2. If not found, fetch from external APIs
-        # (get_data will raise an exception if it fails, which DRF handles)
+    
         try:
             payload = get_data(name)
         except Exception as e:
@@ -164,8 +138,7 @@ class GenderizeViewSet(viewsets.ModelViewSet):
                 'message': str(e)
             }, status=status.HTTP_502_BAD_GATEWAY)
 
-        # 3. Use the Serializer to save the new record
-        # Note: We use the context trick again for your custom create()
+
         serializer = self.get_serializer(
             data={'name': name}, 
             context={'payload': payload}
@@ -174,25 +147,20 @@ class GenderizeViewSet(viewsets.ModelViewSet):
         if serializer.is_valid(raise_exception=True):
             new_instance = serializer.save()
             
-            # Use the display serializer for the final output
             return Response({
                 'status': 'success',
                 'source': 'external_api',
                 'data': ProfileSerializer(new_instance).data
             }, status=status.HTTP_201_CREATED)
 
-        # Fallback error
+        
         return Response({'status': 'error', 'message': 'Could not process request'}, status=400)
     
     def retrieve(self, request, *args, **kwargs):
-        print(self.kwargs)
-     
+    
         pk = self.kwargs.get('pk')
-        print(pk)
         instance = Profile.objects.get(id=pk)
 
-        #instance = Profile.objects.filter(name=name).first()
-        print('the instance:',instance)
         if instance:
             
             return Response({
@@ -206,14 +174,9 @@ class GenderizeViewSet(viewsets.ModelViewSet):
             
     def destroy(self,request, *args, **kwargs):
     
-        print(self.kwargs)
-     
         pk = self.kwargs.get('pk')
-        print(pk)
         instance = Profile.objects.get(id=pk)
 
-        #instance = Profile.objects.filter(name=name).first()
-        print('the instance:',instance)
         if instance:
             instance.delete()
             return Response({
